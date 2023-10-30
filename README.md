@@ -70,6 +70,7 @@ http://blog.klauspost.com/blazingly-fast-reed-solomon-coding/
 
 ### LICENSE
 
+ * Copyright (C) 2023-x Storj Labs, Inc.
  * Copyright (C) 2016-2017 Vivint, Inc.
  * Copyright (c) 2015 Klaus Post
  * Copyright (c) 2015 Backblaze
