@@ -1,4 +1,4 @@
-module github.com/vivint/infectious
+module storj.io/infectious
 
 go 1.19
 

@@ -1,7 +1,5 @@
 # infectious
 
-[![GoDoc](https://godoc.org/github.com/vivint/infectious?status.png)](https://godoc.org/github.com/vivint/infectious)
-
 Infectious implements
 [Reed-Solomon forward error correction](https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction).
 It uses the
@@ -61,13 +59,13 @@ fmt.Printf("got: %#v\n", string(result))
 performance at the expense of having some really sharp edges! Read the
 documentation about memory lifecycles carefully!
 
-Please see the docs at http://godoc.org/github.com/vivint/infectious
+Please see the docs at http://pkg.go.dev/storj.io/infectious
 
 ### Thanks
 
-We're forever indebted to the giants on whose shoulders we stand. The LICENSE 
-has our full copyright history, but an extra special thanks to Klaus Post for 
-much of the initial Go code. See his post for more: 
+We're forever indebted to the giants on whose shoulders we stand. The LICENSE
+has our full copyright history, but an extra special thanks to Klaus Post for
+much of the initial Go code. See his post for more:
 http://blog.klauspost.com/blazingly-fast-reed-solomon-coding/
 
 ### LICENSE

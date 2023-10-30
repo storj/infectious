@@ -25,7 +25,7 @@ package infectious_test
 import (
 	"fmt"
 
-	"github.com/vivint/infectious"
+	"storj.io/infectious"
 )
 
 func Example() {
