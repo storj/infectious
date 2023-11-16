@@ -55,12 +55,14 @@ func Wrap(tb testing.TB) *Asserter {
 
 func (a *Asserter) AssertNoError(err error) {
 	if err != nil {
+		a.tb.Helper()
 		a.tb.Fatalf("expected no error; got %v", err)
 	}
 }
 
 func (a *Asserter) AssertDeepEqual(x, y interface{}) {
 	if !reflect.DeepEqual(x, y) {
+		a.tb.Helper()
 		a.tb.Fatalf("expected\n%#v\n%#v\nto be equal", x, y)
 	}
 }

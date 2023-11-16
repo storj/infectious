@@ -35,7 +35,8 @@ func TestBerlekampWelchSingle(t *testing.T) {
 	test := NewBerlekampWelchTest(t, required, total)
 	_, shares := test.SomeShares(block)
 
-	out, err := test.code.berlekampWelch(shares, 0)
+	out := make([]byte, test.code.n)
+	err := test.code.berlekampWelch(shares, 0, out)
 	test.AssertNoError(err)
 	test.AssertDeepEqual(out, []byte{0x01, 0x02, 0x03, 0x15, 0x69, 0xcc, 0xf2})
 }
@@ -105,8 +106,28 @@ func TestBerlekampWelchErrors(t *testing.T) {
 		}
 
 		decoded_shares, callback := test.StoreShares()
-		test.AssertNoError(test.code.decode(shares, callback))
+		test.AssertNoError(test.code.decode(shares_copy, callback))
 		test.AssertDeepEqual(decoded_shares[:required], shares[:required])
+	}
+}
+
+func TestBerlekampWelchErrors_DontModifyOriginalData(t *testing.T) {
+	const block = 4096
+	const total, required = 7, 3
+
+	test := NewBerlekampWelchTest(t, required, total)
+	_, shares := test.SomeShares(block)
+	test.AssertNoError(test.code.decode(shares, nil))
+
+	initial_share_data := shares[1].Data
+	test.MutateShare(32, shares[1])
+
+	decoded_shares, callback := test.StoreShares()
+	test.AssertNoError(test.code.decode(shares, callback))
+	test.AssertDeepEqual(decoded_shares[:required], shares[:required])
+
+	if &initial_share_data[0] == &shares[1].Data[0] {
+		t.Fatal("decode modified original share data")
 	}
 }
 
