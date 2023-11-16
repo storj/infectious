@@ -25,6 +25,7 @@ package infectious
 import (
 	"errors"
 	"sort"
+	"strconv"
 )
 
 // Decode will take a destination buffer (can be nil) and a list of shares
@@ -90,8 +91,10 @@ func (fc *FEC) Correct(shares []Share) error {
 	if err != nil {
 		return err
 	}
-	buf := make([]byte, len(shares[0].Data))
 
+	buf := make([]byte, len(shares[0].Data))
+	recreated := make([]bool, len(shares))
+	correction := make([]byte, fc.n)
 	for i := 0; i < synd.r; i++ {
 		for j := range buf {
 			buf[j] = 0
@@ -105,12 +108,22 @@ func (fc *FEC) Correct(shares []Share) error {
 			if buf[j] == 0 {
 				continue
 			}
-			data, err := fc.berlekampWelch(shares, j)
+
+			err := fc.berlekampWelch(shares, j, correction)
 			if err != nil {
 				return err
 			}
-			for _, share := range shares {
-				share.Data[j] = data[share.Number]
+
+			for shareIndex := range shares {
+				share := &shares[shareIndex]
+				v := correction[share.Number]
+				if share.Data[j] != v {
+					if !recreated[shareIndex] {
+						recreated[shareIndex] = true
+						share.Data = append([]byte{}, share.Data...)
+					}
+					share.Data[j] = v
+				}
 			}
 		}
 	}
@@ -118,14 +131,14 @@ func (fc *FEC) Correct(shares []Share) error {
 	return nil
 }
 
-func (fc *FEC) berlekampWelch(shares []Share, index int) ([]byte, error) {
+func (fc *FEC) berlekampWelch(shares []Share, index int, out []byte) error {
 	k := fc.k        // required size
 	r := len(shares) // required + redundancy size
 	e := (r - k) / 2 // deg of E polynomial
 	q := e + k       // def of Q polynomial
 
 	if e <= 0 {
-		return nil, NotEnoughShares
+		return NotEnoughShares
 	}
 
 	const interp_base = gfVal(2)
@@ -171,7 +184,7 @@ func (fc *FEC) berlekampWelch(shares []Share, index int) ([]byte, error) {
 	// invert and put the result in a
 	err := s.invertWith(a)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// multiply the inverted matrix by the column vector
@@ -191,14 +204,17 @@ func (fc *FEC) berlekampWelch(shares []Share, index int) ([]byte, error) {
 
 	p_poly, rem, err := q_poly.div(e_poly)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if !rem.isZero() {
-		return nil, TooManyErrors
+		return TooManyErrors
 	}
 
-	out := make([]byte, fc.n)
+	if len(out) != fc.n {
+		return errors.New("out should be of length " + strconv.Itoa(fc.n))
+	}
+
 	for i := range out {
 		pt := gfConst(0)
 		if i != 0 {
@@ -207,7 +223,7 @@ func (fc *FEC) berlekampWelch(shares []Share, index int) ([]byte, error) {
 		out[i] = byte(p_poly.eval(pt))
 	}
 
-	return out, nil
+	return nil
 }
 
 func (fc *FEC) syndromeMatrix(shares []Share) (gfMat, error) {
