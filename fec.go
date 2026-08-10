@@ -34,9 +34,10 @@
 package infectious
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 )
 
 // FEC represents operations performed on a Reed-Solomon-based
@@ -226,11 +227,11 @@ func (s *Share) DeepCopy() (c Share) {
 	return c
 }
 
-type byNumber []Share
-
-func (b byNumber) Len() int               { return len(b) }
-func (b byNumber) Less(i int, j int) bool { return b[i].Number < b[j].Number }
-func (b byNumber) Swap(i int, j int)      { b[i], b[j] = b[j], b[i] }
+func sortByNumber(shares []Share) {
+	slices.SortFunc(shares, func(a, b Share) int {
+		return cmp.Compare(a.Number, b.Number)
+	})
+}
 
 // checkShares validates shares that have already been sorted by number.
 func checkShares(shares []Share, n int) error {
@@ -272,7 +273,7 @@ func (f *FEC) Rebuild(shares []Share, output func(Share)) error {
 	}
 
 	share_size := len(shares[0].Data)
-	sort.Sort(byNumber(shares))
+	sortByNumber(shares)
 
 	if err := checkShares(shares, n); err != nil {
 		return err

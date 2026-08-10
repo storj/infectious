@@ -24,7 +24,6 @@ package infectious
 
 import (
 	"errors"
-	"sort"
 	"strconv"
 )
 
@@ -85,7 +84,7 @@ func (fc *FEC) Correct(shares []Share) error {
 		return errors.New("must specify at least the number of required shares")
 	}
 
-	sort.Sort(byNumber(shares))
+	sortByNumber(shares)
 
 	if err := checkShares(shares, fc.n); err != nil {
 		return err

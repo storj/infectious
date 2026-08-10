@@ -25,7 +25,7 @@ package infectious
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 )
 
 // RebuildPlan holds the part of a rebuild that depends only on which share
@@ -80,7 +80,7 @@ func (f *FEC) PlanRebuild(shareNumbers []int) (*RebuildPlan, error) {
 	}
 
 	sorted := append([]int(nil), shareNumbers...)
-	sort.Ints(sorted)
+	slices.Sort(sorted)
 
 	if sorted[0] < 0 {
 		return nil, fmt.Errorf("invalid share id: %d", sorted[0])
