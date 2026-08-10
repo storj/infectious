@@ -32,8 +32,9 @@ import (
 // (pieces). It will return the data passed in to the corresponding Encode
 // call or return an error.
 //
-// It will first correct the shares using Correct, mutating and reordering the
-// passed-in shares arguments. Then it will rebuild the data using Rebuild.
+// It will first correct the shares using Correct, reordering the passed-in
+// shares slice and replacing the Data of corrected shares with new buffers.
+// Then it will rebuild the data using Rebuild.
 // Finally it will concatenate the data into the given output buffer dst if it
 // has capacity, growing it otherwise.
 //
@@ -77,7 +78,8 @@ func (f *FEC) decode(shares []Share, output func(Share)) error {
 
 // Correct implements the Berlekamp-Welch algorithm for correcting
 // errors in given FEC encoded data. It will correct the supplied shares,
-// mutating the underlying byte slices and reordering the shares
+// reordering the shares slice and replacing the Data of corrected shares
+// with new buffers; the passed-in byte slices are not modified.
 func (fc *FEC) Correct(shares []Share) error {
 	if len(shares) < fc.k {
 		return errors.New("must specify at least the number of required shares")

@@ -259,6 +259,8 @@ func checkShares(shares []Share, n int) error {
 // Note that the byte slices in Shares passed to output may be reused when
 // output returns.
 //
+// Note that Rebuild sorts the shares slice, reordering it in place.
+//
 // Rebuild assumes that you have already called Correct or did not need to.
 func (f *FEC) Rebuild(shares []Share, output func(Share)) error {
 	k := f.k
