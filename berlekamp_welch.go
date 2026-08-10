@@ -164,20 +164,20 @@ func (fc *FEC) berlekampWelch(shares []Share, index int, out []byte) error {
 	f := make(gfVals, dim)   // constant column vector
 	u := make(gfVals, dim)   // solution vector
 
-	for i := 0; i < dim; i++ {
+	for i := range dim {
 		x_i := eval_point(shares[i].Number)
 		r_i := gfConst(shares[i].Data[index])
 
 		f[i] = x_i.pow(e).mul(r_i)
 
-		for j := 0; j < q; j++ {
+		for j := range q {
 			s.set(i, j, x_i.pow(j))
 			if i == j {
 				a.set(i, j, gfConst(1))
 			}
 		}
 
-		for k := 0; k < e; k++ {
+		for k := range e {
 			j := k + q
 
 			s.set(i, j, x_i.pow(k).mul(r_i))
@@ -194,7 +194,7 @@ func (fc *FEC) berlekampWelch(shares []Share, index int, out []byte) error {
 	}
 
 	// multiply the inverted matrix by the column vector
-	for i := 0; i < dim; i++ {
+	for i := range dim {
 		ri := a.indexRow(i)
 		u[i] = ri.dot(f)
 	}

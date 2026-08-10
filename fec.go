@@ -65,12 +65,12 @@ func NewFEC(k, n int) (*FEC, error) {
 		temp_matrix[i] = gf_exp[((i/k)*(i%k))%255]
 	}
 
-	for i := 0; i < k; i++ {
+	for i := range k {
 		enc_matrix[i*(k+1)] = 1
 	}
 
 	for row := k * k; row < n*k; row += k {
-		for col := 0; col < k; col++ {
+		for col := range k {
 			pa := temp_matrix[row:]
 			pb := temp_matrix[col:]
 			acc := byte(0)
@@ -86,7 +86,7 @@ func NewFEC(k, n int) (*FEC, error) {
 	vand_matrix := make([]byte, k*n)
 	vand_matrix[0] = 1
 	g := byte(1)
-	for row := 0; row < k; row++ {
+	for row := range k {
 		a := byte(1)
 		for col := 1; col < n; col++ {
 			vand_matrix[row*n+col] = a // 2.pow(i * j) FIGURE IT OUT
@@ -136,7 +136,7 @@ func (f *FEC) Encode(input []byte, output func(Share)) error {
 
 	block_size := size / k
 
-	for i := 0; i < k; i++ {
+	for i := range k {
 		output(Share{
 			Number: i,
 			Data:   input[i*block_size : i*block_size+block_size]})
@@ -148,7 +148,7 @@ func (f *FEC) Encode(input []byte, output func(Share)) error {
 			fec_buf[j] = 0
 		}
 
-		for j := 0; j < k; j++ {
+		for j := range k {
 			addmul(fec_buf, input[j*block_size:j*block_size+block_size],
 				enc_matrix[i*k+j])
 		}
@@ -203,7 +203,7 @@ func (f *FEC) EncodeSingle(input, output []byte, num int) error {
 		output[i] = 0
 	}
 
-	for i := 0; i < k; i++ {
+	for i := range k {
 		addmul(output, input[i*block_size:i*block_size+block_size],
 			enc_matrix[num*k+i])
 	}
@@ -285,7 +285,7 @@ func (f *FEC) Rebuild(shares []Share, output func(Share)) error {
 	shares_b_iter := 0
 	shares_e_iter := len(shares) - 1
 
-	for i := 0; i < k; i++ {
+	for i := range k {
 		var share_id int
 		var share_data []byte
 
@@ -320,13 +320,13 @@ func (f *FEC) Rebuild(shares []Share, output func(Share)) error {
 	}
 
 	buf := make([]byte, share_size)
-	for i := 0; i < len(indexes); i++ {
+	for i := range indexes {
 		if indexes[i] >= k {
 			for j := range buf {
 				buf[j] = 0
 			}
 
-			for col := 0; col < k; col++ {
+			for col := range k {
 				addmul(buf, sharesv[col], m_dec[i*k+col])
 			}
 

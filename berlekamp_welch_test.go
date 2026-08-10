@@ -98,9 +98,9 @@ func TestBerlekampWelchErrors(t *testing.T) {
 	_, shares := test.SomeShares(block)
 	test.AssertNoError(test.code.decode(shares, nil))
 
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		shares_copy := test.CopyShares(shares)
-		for i := 0; i < block; i++ {
+		for i := range block {
 			test.MutateShare(i, shares_copy[rand.Intn(total)])
 			test.MutateShare(i, shares_copy[rand.Intn(total)])
 		}
@@ -139,12 +139,12 @@ func TestBerlekampWelchRandomShares(t *testing.T) {
 	_, shares := test.SomeShares(block)
 	test.AssertNoError(test.code.decode(shares, nil))
 
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		test_shares := test.CopyShares(shares)
 		test.PermuteShares(test_shares)
 		test_shares = test_shares[:required+2+rand.Intn(total-required-2)]
 
-		for i := 0; i < block; i++ {
+		for i := range block {
 			test.MutateShare(i, test_shares[rand.Intn(len(test_shares))])
 		}
 
@@ -268,7 +268,7 @@ func (t *BerlekampWelchTest) MutateShare(idx int, share Share) {
 }
 
 func (t *BerlekampWelchTest) PermuteShares(shares []Share) {
-	for i := 0; i < len(shares); i++ {
+	for i := range shares {
 		with := rand.Intn(len(shares)-i) + i
 		shares[i], shares[with] = shares[with], shares[i]
 	}

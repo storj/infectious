@@ -107,7 +107,7 @@ func (f *FEC) PlanRebuild(shareNumbers []int) (*RebuildPlan, error) {
 	// sorted numbers from both ends puts data share i in slot i whenever it
 	// was supplied, and backfills the remaining slots with parity shares.
 	begin, end := 0, len(sorted)-1
-	for i := 0; i < k; i++ {
+	for i := range k {
 		var shareID int
 		if sorted[begin] == i {
 			shareID = sorted[begin]

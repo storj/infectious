@@ -42,7 +42,7 @@ func gfConst(val byte) gfVal {
 func (b gfVal) pow(val int) gfVal {
 	out := gfVal(1)
 	mul_base := gf_mul_table[b][:]
-	for i := 0; i < val; i++ {
+	for range val {
 		out = gfVal(mul_base[out])
 	}
 	return out

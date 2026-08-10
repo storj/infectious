@@ -37,7 +37,7 @@ func addmulSlow(z []byte, x []byte, y byte) {
 }
 
 func TestAddmul(t *testing.T) {
-	for i := 0; i < 10000; i++ {
+	for range 10000 {
 		align := rand.Intn(256)
 		size := rand.Intn(1024) + align
 		y := byte(rand.Intn(256))

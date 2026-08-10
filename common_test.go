@@ -60,7 +60,7 @@ func (a *Asserter) AssertNoError(err error) {
 	}
 }
 
-func (a *Asserter) AssertDeepEqual(x, y interface{}) {
+func (a *Asserter) AssertDeepEqual(x, y any) {
 	if !reflect.DeepEqual(x, y) {
 		a.tb.Helper()
 		a.tb.Fatalf("expected\n%#v\n%#v\nto be equal", x, y)

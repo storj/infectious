@@ -93,7 +93,7 @@ func TestEncodeSingle(t *testing.T) {
 
 	// encode it and store to outputs
 	var outputs = make(map[int][]byte)
-	for i := 0; i < total; i++ {
+	for i := range total {
 		outputs[i] = make([]byte, block)
 		err = code.EncodeSingle(data[:], outputs[i], i)
 		if err != nil {
@@ -257,7 +257,7 @@ func BenchmarkEncodeSingle(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		for j := 0; j < total; j++ {
+		for j := range total {
 			code.EncodeSingle(data, output, j)
 		}
 	}
@@ -377,10 +377,7 @@ func BenchmarkMultiple(b *testing.B) {
 					})
 
 					offset := i % (conf.total / 4)
-					n := conf.required + 1 + offset
-					if n > conf.total {
-						n = conf.total
-					}
+					n := min(conf.required+1+offset, conf.total)
 
 					_, err = fec.Decode(output[:dataSize], shares[:n])
 					if err != nil {

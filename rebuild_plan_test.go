@@ -86,7 +86,7 @@ func subsetsOfAtLeast(total, k int) [][]int {
 			continue
 		}
 		nums := make([]int, 0, total)
-		for num := 0; num < total; num++ {
+		for num := range total {
 			if mask&(1<<num) != 0 {
 				nums = append(nums, num)
 			}
@@ -153,7 +153,6 @@ func TestRebuildPlanMatchesRebuild(t *testing.T) {
 	}
 
 	for _, conf := range confs {
-		conf := conf
 		t.Run(fmt.Sprintf("r%dt%d", conf.required, conf.total), func(t *testing.T) {
 			code, err := NewFEC(conf.required, conf.total)
 			if err != nil {
@@ -189,7 +188,7 @@ func TestRebuildPlanMatchesRebuild(t *testing.T) {
 
 			// random mixtures
 			rng := rand.New(rand.NewSource(7))
-			for trial := 0; trial < 25; trial++ {
+			for range 25 {
 				perm := rng.Perm(conf.total)[:k]
 				sort.Ints(perm)
 				subsets = append(subsets, perm)
@@ -221,7 +220,6 @@ func TestRebuildPlanExhaustiveSmall(t *testing.T) {
 	}
 
 	for _, conf := range confs {
-		conf := conf
 		t.Run(fmt.Sprintf("r%dt%d", conf.required, conf.total), func(t *testing.T) {
 			code, err := NewFEC(conf.required, conf.total)
 			if err != nil {
@@ -243,7 +241,7 @@ func TestRebuildPlanExhaustiveSmall(t *testing.T) {
 			}
 
 			data := make([]byte, 2)
-			for v := 0; v < 1<<16; v++ {
+			for v := range 1 << 16 {
 				data[0], data[1] = byte(v), byte(v>>8)
 				shares := encodeShares(t, code, data)
 
@@ -278,7 +276,7 @@ func TestRebuildPlanReuse(t *testing.T) {
 	rebuilder := plan.NewRebuilder()
 
 	rng := rand.New(rand.NewSource(99))
-	for round := 0; round < 20; round++ {
+	for round := range 20 {
 		data := make([]byte, required*block)
 		rng.Read(data)
 
@@ -381,7 +379,7 @@ func FuzzRebuildPlan(f *testing.F) {
 		// The subset is exactly what the mask selects, so the shares a failing
 		// corpus entry used can be read straight off the mask.
 		nums := make([]int, 0, n)
-		for num := 0; num < n; num++ {
+		for num := range n {
 			if mask&(1<<num) != 0 {
 				nums = append(nums, num)
 			}

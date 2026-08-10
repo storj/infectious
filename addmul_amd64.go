@@ -23,7 +23,6 @@
 // SOFTWARE.
 
 //go:build !purego
-// +build !purego
 
 package infectious
 
