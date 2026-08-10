@@ -204,6 +204,42 @@ func BenchmarkBerlekampWelchTwoErrors(b *testing.B) {
 	}
 }
 
+// BenchmarkCorrectCorruptedShare corrupts one entire share so that
+// berlekampWelch runs for every byte column, isolating its cost from the
+// syndrome scan.
+func BenchmarkCorrectCorruptedShare(b *testing.B) {
+	const block = 64
+	const total, required = 40, 20
+
+	test := NewBerlekampWelchTest(b, required, total)
+	_, origin := test.SomeShares(block)
+
+	corrupt := func() []Share {
+		shares := test.CopyShares(origin)
+		for j := range shares[0].Data {
+			shares[0].Data[j] ^= 0x5a
+		}
+		return shares
+	}
+
+	// check once that Correct actually repairs the corruption.
+	checked := corrupt()
+	test.AssertNoError(test.code.Correct(checked))
+	test.AssertDeepEqual(checked, origin)
+
+	b.ReportAllocs()
+	b.SetBytes(required * block)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		shares := corrupt()
+		b.StartTimer()
+
+		test.AssertNoError(test.code.Correct(shares))
+	}
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Helpers
 ///////////////////////////////////////////////////////////////////////////////

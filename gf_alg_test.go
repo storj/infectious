@@ -34,6 +34,25 @@ func TestGFValPow(t *testing.T) {
 			naive = naive.mul(gfVal(b))
 		}
 	}
+
+	// negative exponents are taken in the multiplicative group, so
+	// b.pow(-val) is inv(b).pow(val).
+	for b := 1; b < 256; b++ {
+		inv, err := gfVal(b).inv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		naive := gfVal(1)
+		for val := 0; val < 600; val++ {
+			if got := gfVal(b).pow(-val); got != naive {
+				t.Fatalf("%d.pow(%d) = %02x, want %02x", b, -val, got, naive)
+			}
+			naive = naive.mul(inv)
+		}
+	}
+	if got := gfVal(0).pow(-1); got != 0 {
+		t.Fatalf("0.pow(-1) = %02x, want 0", got)
+	}
 }
 
 func TestGFPolyEval(t *testing.T) {
