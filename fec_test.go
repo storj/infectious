@@ -122,6 +122,44 @@ func TestEncodeSingle(t *testing.T) {
 	}
 }
 
+func TestDuplicateShares(t *testing.T) {
+	code, err := NewFEC(3, 6)
+	if err != nil {
+		t.Fatalf("failed to create new fec code: %s", err)
+	}
+
+	data := []byte("abcdefghi")
+	var shares []Share
+	err = code.Encode(data, func(s Share) {
+		shares = append(shares, s.DeepCopy())
+	})
+	if err != nil {
+		t.Fatalf("encode failed: %s", err)
+	}
+
+	dup := func() []Share {
+		return []Share{
+			shares[0].DeepCopy(),
+			shares[0].DeepCopy(),
+			shares[1].DeepCopy(),
+		}
+	}
+
+	err = code.Rebuild(dup(), nil)
+	if err == nil {
+		t.Fatalf("expected Rebuild to reject duplicate shares")
+	}
+
+	err = code.Correct(dup())
+	if err == nil {
+		t.Fatalf("expected Correct to reject duplicate shares")
+	}
+
+	if _, err = code.Decode(nil, dup()); err == nil {
+		t.Fatalf("expected Decode to reject duplicate shares")
+	}
+}
+
 func BenchmarkEncode(b *testing.B) {
 	const block = 1024 * 1024
 	const total, required = 40, 20

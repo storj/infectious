@@ -232,6 +232,16 @@ func (b byNumber) Len() int               { return len(b) }
 func (b byNumber) Less(i int, j int) bool { return b[i].Number < b[j].Number }
 func (b byNumber) Swap(i int, j int)      { b[i], b[j] = b[j], b[i] }
 
+// checkShares validates shares that have already been sorted by number.
+func checkShares(shares []Share) error {
+	for i := 1; i < len(shares); i++ {
+		if shares[i].Number == shares[i-1].Number {
+			return fmt.Errorf("duplicate share id: %d", shares[i].Number)
+		}
+	}
+	return nil
+}
+
 // Rebuild will take a list of corrected shares (pieces) and a callback output.
 // output will be called k times ((*FEC).Required() times) with 1/k of the
 // original data each time and the index of that data piece.
@@ -255,6 +265,10 @@ func (f *FEC) Rebuild(shares []Share, output func(Share)) error {
 
 	share_size := len(shares[0].Data)
 	sort.Sort(byNumber(shares))
+
+	if err := checkShares(shares); err != nil {
+		return err
+	}
 
 	m_dec := make([]byte, k*k)
 	indexes := make([]int, k)

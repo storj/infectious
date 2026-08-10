@@ -85,6 +85,10 @@ func (fc *FEC) Correct(shares []Share) error {
 
 	sort.Sort(byNumber(shares))
 
+	if err := checkShares(shares); err != nil {
+		return err
+	}
+
 	// fast path: check to see if there are no errors by evaluating it with
 	// the syndrome matrix.
 	synd, err := fc.syndromeMatrix(shares)
