@@ -122,6 +122,41 @@ func TestEncodeSingle(t *testing.T) {
 	}
 }
 
+func TestEncodeMatchesEncodeSingle(t *testing.T) {
+	// block sizes include non-power-of-2 values with a scalar tail
+	for _, block := range []int{1, 4096, 16391, 49157} {
+		for _, conf := range []struct{ required, total int }{
+			{1, 1}, {1, 4}, {2, 2}, {3, 6}, {20, 40},
+		} {
+			code, err := NewFEC(conf.required, conf.total)
+			if err != nil {
+				t.Fatalf("failed to create new fec code: %s", err)
+			}
+
+			data := RandomBytes(conf.required * block)
+
+			shares := make(map[int][]byte)
+			err = code.Encode(data, func(s Share) {
+				shares[s.Number] = s.DeepCopy().Data
+			})
+			if err != nil {
+				t.Fatalf("encode failed: %s", err)
+			}
+
+			single := make([]byte, block)
+			for i := range conf.total {
+				if err := code.EncodeSingle(data, single, i); err != nil {
+					t.Fatalf("encode single failed: %s", err)
+				}
+				if !bytes.Equal(shares[i], single) {
+					t.Fatalf("k=%d n=%d block=%d: share %d mismatch",
+						conf.required, conf.total, block, i)
+				}
+			}
+		}
+	}
+}
+
 func TestDuplicateShares(t *testing.T) {
 	code, err := NewFEC(3, 6)
 	if err != nil {
@@ -212,6 +247,31 @@ func TestInvalidShares(t *testing.T) {
 
 func BenchmarkEncode(b *testing.B) {
 	const block = 1024 * 1024
+	const total, required = 40, 20
+
+	code, err := NewFEC(required, total)
+	if err != nil {
+		b.Fatalf("failed to create new fec code: %s", err)
+	}
+
+	// seed the initial data
+	data := make([]byte, required*block)
+	for i := range data {
+		data[i] = byte(i)
+	}
+	store := func(Share) {}
+
+	b.SetBytes(block * required)
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		code.Encode(data, store)
+	}
+}
+
+func BenchmarkEncodeSmall(b *testing.B) {
+	const block = 4096
 	const total, required = 40, 20
 
 	code, err := NewFEC(required, total)
