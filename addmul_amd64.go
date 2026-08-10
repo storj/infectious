@@ -33,7 +33,7 @@ func addmulSSSE3(lowhigh *pair, in, out *byte, len int, mul *byte)
 func addmulAVX2(lowhigh *pair, in, out *byte, len int)
 
 func addmul(z, x []byte, y byte) {
-	if len(z) == 0 {
+	if len(z) == 0 || y == 0 {
 		return
 	}
 
