@@ -233,10 +233,16 @@ func (b byNumber) Less(i int, j int) bool { return b[i].Number < b[j].Number }
 func (b byNumber) Swap(i int, j int)      { b[i], b[j] = b[j], b[i] }
 
 // checkShares validates shares that have already been sorted by number.
-func checkShares(shares []Share) error {
-	for i := 1; i < len(shares); i++ {
-		if shares[i].Number == shares[i-1].Number {
+func checkShares(shares []Share, n int) error {
+	for i := range shares {
+		if shares[i].Number < 0 || shares[i].Number >= n {
+			return fmt.Errorf("invalid share id: %d", shares[i].Number)
+		}
+		if i > 0 && shares[i].Number == shares[i-1].Number {
 			return fmt.Errorf("duplicate share id: %d", shares[i].Number)
+		}
+		if len(shares[i].Data) != len(shares[0].Data) {
+			return errors.New("shares must all be the same length")
 		}
 	}
 	return nil
@@ -266,7 +272,7 @@ func (f *FEC) Rebuild(shares []Share, output func(Share)) error {
 	share_size := len(shares[0].Data)
 	sort.Sort(byNumber(shares))
 
-	if err := checkShares(shares); err != nil {
+	if err := checkShares(shares, n); err != nil {
 		return err
 	}
 
@@ -290,10 +296,6 @@ func (f *FEC) Rebuild(shares []Share, output func(Share)) error {
 			share_id = share.Number
 			share_data = share.Data
 			shares_e_iter--
-		}
-
-		if share_id >= n {
-			return fmt.Errorf("invalid share id: %d", share_id)
 		}
 
 		if share_id < k {

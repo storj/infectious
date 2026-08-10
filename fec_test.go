@@ -160,6 +160,56 @@ func TestDuplicateShares(t *testing.T) {
 	}
 }
 
+func TestInvalidShares(t *testing.T) {
+	code, err := NewFEC(3, 6)
+	if err != nil {
+		t.Fatalf("failed to create new fec code: %s", err)
+	}
+
+	data := []byte("abcdefghi")
+	var shares []Share
+	err = code.Encode(data, func(s Share) {
+		shares = append(shares, s.DeepCopy())
+	})
+	if err != nil {
+		t.Fatalf("encode failed: %s", err)
+	}
+
+	pick := func(nums ...int) []Share {
+		var out []Share
+		for _, num := range nums {
+			out = append(out, shares[num].DeepCopy())
+		}
+		return out
+	}
+
+	// mismatched share lengths
+	short := pick(1, 2, 4)
+	short[2].Data = short[2].Data[:2]
+	if err := code.Rebuild(short, nil); err == nil {
+		t.Fatalf("expected Rebuild to reject mismatched share lengths")
+	}
+	short = pick(1, 2, 4)
+	short[2].Data = short[2].Data[:2]
+	if err := code.Correct(short); err == nil {
+		t.Fatalf("expected Correct to reject mismatched share lengths")
+	}
+
+	// out of range share numbers
+	for _, num := range []int{-1, 6} {
+		bad := pick(1, 2, 4)
+		bad[2].Number = num
+		if err := code.Rebuild(bad, nil); err == nil {
+			t.Fatalf("expected Rebuild to reject share number %d", num)
+		}
+		bad = pick(1, 2, 4)
+		bad[2].Number = num
+		if err := code.Correct(bad); err == nil {
+			t.Fatalf("expected Correct to reject share number %d", num)
+		}
+	}
+}
+
 func BenchmarkEncode(b *testing.B) {
 	const block = 1024 * 1024
 	const total, required = 40, 20

@@ -85,7 +85,7 @@ func (fc *FEC) Correct(shares []Share) error {
 
 	sort.Sort(byNumber(shares))
 
-	if err := checkShares(shares); err != nil {
+	if err := checkShares(shares, fc.n); err != nil {
 		return err
 	}
 
