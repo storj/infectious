@@ -101,9 +101,7 @@ func (fc *FEC) Correct(shares []Share) error {
 	recreated := make([]bool, len(shares))
 	correction := make([]byte, fc.n)
 	for i := 0; i < synd.r; i++ {
-		for j := range buf {
-			buf[j] = 0
-		}
+		clear(buf)
 
 		for j := 0; j < synd.c; j++ {
 			addmul(buf, shares[j].Data, byte(synd.get(i, j)))

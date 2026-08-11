@@ -114,11 +114,7 @@ func (a gfVals) String() string {
 type gfPoly []gfVal
 
 func polyZero(size int) gfPoly {
-	out := make(gfPoly, size)
-	for i := range out {
-		out[i] = gfConst(0)
-	}
-	return out
+	return make(gfPoly, size)
 }
 
 func (p gfPoly) isZero() bool {
