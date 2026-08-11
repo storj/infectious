@@ -88,7 +88,11 @@ func (a gfVal) inv() (gfVal, error) {
 type gfVals []gfVal
 
 func (a gfVals) unsafeBytes() []byte {
-	return *(*[]byte)(unsafe.Pointer(&a))
+	// gfVal is a byte, so the backing array can be reinterpreted directly.
+	// Going through unsafe.Slice rather than casting &a keeps the slice header
+	// out of memory, which matters because the matrix row helpers call this on
+	// every row operation.
+	return unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(a))), len(a))
 }
 
 func (a gfVals) dot(b gfVals) gfVal {
@@ -310,10 +314,19 @@ func (m gfMat) scaleRow(i int, val gfVal) {
 	}
 }
 
+// addmulRowFrom adds val times row i into row j, touching only columns
+// [start, m.c). Callers pass a nonzero start when both rows are known to be
+// zero in the leading columns, which is the case during elimination.
+func (m gfMat) addmulRowFrom(i, j int, val gfVal, start int) {
+	if val == 0 {
+		return
+	}
+	d := m.d.unsafeBytes()
+	addmul(d[m.c*j+start:m.c*(j+1)], d[m.c*i+start:m.c*(i+1)], byte(val))
+}
+
 func (m gfMat) addmulRow(i, j int, val gfVal) {
-	ri := m.indexRow(i)
-	rj := m.indexRow(j)
-	addmul(rj.unsafeBytes(), ri.unsafeBytes(), byte(val))
+	m.addmulRowFrom(i, j, val, 0)
 }
 
 // in place invert. the output is put into a and m is turned into the identity
@@ -340,9 +353,13 @@ func (m gfMat) invertWith(a gfMat) error {
 		m.scaleRow(i, inv)
 		a.scaleRow(i, inv)
 
+		// Columns before i are already zero in both rows, so the elimination
+		// only has to touch column i onward in m. The same is not true of a,
+		// whose rows pick up entries in arbitrary columns as pivots are
+		// swapped around.
 		for j := i + 1; j < m.r; j++ {
 			leading := m.get(j, i)
-			m.addmulRow(i, j, leading)
+			m.addmulRowFrom(i, j, leading, i)
 			a.addmulRow(i, j, leading)
 		}
 	}
@@ -350,7 +367,7 @@ func (m gfMat) invertWith(a gfMat) error {
 	for i := m.r - 1; i > 0; i-- {
 		for j := i - 1; j >= 0; j-- {
 			trailing := m.get(j, i)
-			m.addmulRow(i, j, trailing)
+			m.addmulRowFrom(i, j, trailing, i)
 			a.addmulRow(i, j, trailing)
 		}
 	}
@@ -381,14 +398,14 @@ func (m gfMat) standardize() error {
 
 		for j := i + 1; j < m.r; j++ {
 			leading := m.get(j, i)
-			m.addmulRow(i, j, leading)
+			m.addmulRowFrom(i, j, leading, i)
 		}
 	}
 
 	for i := m.r - 1; i > 0; i-- {
 		for j := i - 1; j >= 0; j-- {
 			trailing := m.get(j, i)
-			m.addmulRow(i, j, trailing)
+			m.addmulRowFrom(i, j, trailing, i)
 		}
 	}
 
