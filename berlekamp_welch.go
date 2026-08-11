@@ -23,6 +23,7 @@
 package infectious
 
 import (
+	"encoding/binary"
 	"errors"
 	"strconv"
 )
@@ -75,6 +76,25 @@ func (f *FEC) decode(shares []Share, output func(Share)) error {
 	return f.Rebuild(shares, output)
 }
 
+// firstNonZero returns the index of the first nonzero byte of b, or len(b) if
+// every byte is zero. It reads a word at a time: the syndrome check calls it
+// on buffers that are entirely zero whenever the data is intact, which is the
+// case it needs to get through quickly.
+func firstNonZero(b []byte) int {
+	i := 0
+	for ; i+8 <= len(b); i += 8 {
+		if binary.LittleEndian.Uint64(b[i:]) != 0 {
+			break
+		}
+	}
+	for ; i < len(b); i++ {
+		if b[i] != 0 {
+			return i
+		}
+	}
+	return len(b)
+}
+
 // Correct implements the Berlekamp-Welch algorithm for correcting
 // errors in given FEC encoded data. It will correct the supplied shares,
 // reordering the shares slice and replacing the Data of corrected shares
@@ -107,11 +127,7 @@ func (fc *FEC) Correct(shares []Share) error {
 			addmul(buf, shares[j].Data, byte(synd.get(i, j)))
 		}
 
-		for j := range buf {
-			if buf[j] == 0 {
-				continue
-			}
-
+		for j := firstNonZero(buf); j < len(buf); j += 1 + firstNonZero(buf[j+1:]) {
 			err := fc.berlekampWelch(shares, j, correction)
 			if err != nil {
 				return err

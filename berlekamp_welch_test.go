@@ -154,6 +154,36 @@ func TestBerlekampWelchRandomShares(t *testing.T) {
 	}
 }
 
+func TestFirstNonZero(t *testing.T) {
+	for size := range 40 {
+		b := make([]byte, size)
+		if got := firstNonZero(b); got != size {
+			t.Fatalf("all zero, size %d: got %d, want %d", size, got, size)
+		}
+
+		// a single nonzero byte at every position, in isolation
+		for i := range size {
+			for _, v := range []byte{1, 0x80, 0xff} {
+				b[i] = v
+				if got := firstNonZero(b); got != i {
+					t.Fatalf("size %d, byte %d = %02x: got %d, want %d",
+						size, i, v, got, i)
+				}
+			}
+			b[i] = 0
+		}
+
+		// filling in from the back, the earliest set byte always wins
+		for i := size - 1; i >= 0; i-- {
+			b[i] = 0xff
+			if got := firstNonZero(b); got != i {
+				t.Fatalf("size %d, tail set from %d: got %d, want %d",
+					size, i, got, i)
+			}
+		}
+	}
+}
+
 // TestDecodeRandomCodes sweeps k and n so the correction runs over a range of
 // system sizes, rather than the single code the other tests use.
 func TestDecodeRandomCodes(t *testing.T) {
