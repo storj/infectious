@@ -164,26 +164,29 @@ func (fc *FEC) berlekampWelch(shares []Share, index int, out []byte) error {
 	u := make(gfVals, dim)   // solution vector
 
 	for i := range dim {
+		a.set(i, i, gfConst(1))
+	}
+
+	for i := range dim {
 		x_i := eval_point(shares[i].Number)
 		r_i := gfConst(shares[i].Data[index])
 
-		f[i] = x_i.pow(e).mul(r_i)
-
+		// The powers of x_i are consecutive, so carry a running product
+		// instead of calling pow once per entry.
+		xp := gfConst(1)
 		for j := range q {
-			s.set(i, j, x_i.pow(j))
-			if i == j {
-				a.set(i, j, gfConst(1))
-			}
+			s.set(i, j, xp)
+			xp = xp.mul(x_i)
 		}
 
+		xp = gfConst(1)
 		for k := range e {
-			j := k + q
-
-			s.set(i, j, x_i.pow(k).mul(r_i))
-			if i == j {
-				a.set(i, j, gfConst(1))
-			}
+			s.set(i, k+q, xp.mul(r_i))
+			xp = xp.mul(x_i)
 		}
+
+		// e < q, so xp is x_i^e here.
+		f[i] = xp.mul(r_i)
 	}
 
 	// invert and put the result in a
@@ -220,12 +223,12 @@ func (fc *FEC) berlekampWelch(shares []Share, index int, out []byte) error {
 		return errors.New("out should be of length " + strconv.Itoa(fc.n))
 	}
 
-	for i := range out {
-		pt := gfConst(0)
-		if i != 0 {
-			pt = interp_base.pow(i - 1)
-		}
+	// Same evaluation points as eval_point, walked with a running product.
+	out[0] = byte(p_poly.eval(gfConst(0)))
+	pt := gfConst(1)
+	for i := 1; i < len(out); i++ {
 		out[i] = byte(p_poly.eval(pt))
+		pt = pt.mul(interp_base)
 	}
 
 	return nil
