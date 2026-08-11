@@ -293,12 +293,14 @@ func (m gfMat) indexRow(i int) gfVals {
 }
 
 func (m gfMat) swapRow(i, j int) {
-	tmp := make(gfVals, m.r)
+	if i == j {
+		return
+	}
 	ri := m.indexRow(i)
 	rj := m.indexRow(j)
-	copy(tmp, ri)
-	copy(ri, rj)
-	copy(rj, tmp)
+	for k := range ri {
+		ri[k], rj[k] = rj[k], ri[k]
+	}
 }
 
 func (m gfMat) scaleRow(i int, val gfVal) {

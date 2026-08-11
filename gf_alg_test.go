@@ -55,6 +55,40 @@ func TestGFValPow(t *testing.T) {
 	}
 }
 
+// TestGFMatSwapRow covers matrices with more columns than rows, which is the
+// shape standardize works on.
+func TestGFMatSwapRow(t *testing.T) {
+	for _, dims := range [][2]int{{1, 1}, {2, 4}, {4, 2}, {3, 3}} {
+		r, c := dims[0], dims[1]
+
+		m := matrixNew(r, c)
+		for i := range r {
+			for j := range c {
+				m.set(i, j, gfVal(i*c+j+1))
+			}
+		}
+
+		for i := range r {
+			for j := range r {
+				m.swapRow(i, j)
+
+				for col := range c {
+					if got, want := m.get(i, col), gfVal(j*c+col+1); got != want {
+						t.Fatalf("%dx%d swap(%d,%d): row %d col %d = %02x, want %02x",
+							r, c, i, j, i, col, got, want)
+					}
+					if got, want := m.get(j, col), gfVal(i*c+col+1); got != want {
+						t.Fatalf("%dx%d swap(%d,%d): row %d col %d = %02x, want %02x",
+							r, c, i, j, j, col, got, want)
+					}
+				}
+
+				m.swapRow(i, j)
+			}
+		}
+	}
+}
+
 func TestGFPolyEval(t *testing.T) {
 	for _, p := range []gfPoly{nil, {0x35}, {0x01, 0x00, 0xac, 0x5e}, {0xfe, 0x35, 0x02, 0x01, 0x00}} {
 		for x := 0; x < 256; x++ {
