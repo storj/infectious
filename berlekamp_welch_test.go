@@ -154,6 +154,53 @@ func TestBerlekampWelchRandomShares(t *testing.T) {
 	}
 }
 
+// TestDecodeRandomCodes sweeps k and n so the correction runs over a range of
+// system sizes, rather than the single code the other tests use.
+func TestDecodeRandomCodes(t *testing.T) {
+	rng := rand.New(rand.NewSource(3))
+
+	for iter := range 300 {
+		k := 1 + rng.Intn(12)
+		n := k + rng.Intn(14)
+		block := 1 + rng.Intn(9)
+
+		code, err := NewFEC(k, n)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		data := make([]byte, k*block)
+		rng.Read(data)
+
+		var shares []Share
+		err = code.Encode(data, func(s Share) {
+			shares = append(shares, s.DeepCopy())
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// keep a random subset of at least k shares
+		rng.Shuffle(len(shares), func(i, j int) { shares[i], shares[j] = shares[j], shares[i] })
+		keep := k + rng.Intn(n-k+1)
+		sub := append([]Share(nil), shares[:keep]...)
+
+		// corrupt as many of them as the remaining redundancy allows
+		for e := range (keep - k) / 2 {
+			sub[e].Data = append([]byte(nil), sub[e].Data...)
+			sub[e].Data[rng.Intn(block)] ^= byte(1 + rng.Intn(255))
+		}
+
+		got, err := code.Decode(nil, sub)
+		if err != nil {
+			t.Fatalf("iter %d k=%d n=%d keep=%d: %v", iter, k, n, keep, err)
+		}
+		if !bytes.Equal(got, data) {
+			t.Fatalf("iter %d k=%d n=%d keep=%d: wrong data", iter, k, n, keep)
+		}
+	}
+}
+
 func BenchmarkBerlekampWelch(b *testing.B) {
 	const block = 4096
 	const total, required = 40, 20
