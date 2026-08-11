@@ -63,7 +63,7 @@ func TestAddmul(t *testing.T) {
 
 func BenchmarkAddmul(b *testing.B) {
 	x, z := RandomBytes(1024), RandomBytes(1024)
-	for _, size := range []int{64, 128, 256, 1024} {
+	for _, size := range []int{8, 16, 24, 32, 40, 48, 64, 128, 256, 1024} {
 		x, z := x[:size], z[:size]
 		b.Run(strconv.Itoa(size)+"B", func(b *testing.B) {
 			b.SetBytes(int64(size))
