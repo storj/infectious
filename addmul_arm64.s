@@ -82,3 +82,106 @@ tail16:
 
 done:
 	RET
+
+// func mulsumNEON(tables *[256]pair, coeffs *byte, k int, in *byte, stride int, out *byte, len int)
+// Sets out[:len] to the sum over j < k of coeffs[j] * in[j*stride:][:len].
+// k must be positive and len a multiple of 16.
+TEXT ·mulsumNEON(SB), NOSPLIT, $0-56
+	MOVD tables+0(FP), R0
+	MOVD coeffs+8(FP), R1
+	MOVD k+16(FP), R2
+	MOVD in+24(FP), R3
+	MOVD stride+32(FP), R4
+	MOVD out+40(FP), R5
+	MOVD len+48(FP), R6
+
+	VMOVI $15, V18.B16 // V18: low nibble mask
+
+	CMP $64, R6
+	BLT check16
+
+loop64:
+	VEOR V0.B16, V0.B16, V0.B16
+	VEOR V1.B16, V1.B16, V1.B16
+	VEOR V2.B16, V2.B16, V2.B16
+	VEOR V3.B16, V3.B16, V3.B16
+	MOVD R3, R7 // R7: current input row
+	MOVD R1, R8 // R8: current coefficient
+	MOVD R2, R9 // R9: rows left
+
+inner64:
+	MOVBU.P 1(R8), R10
+	ADD     R10<<5, R0, R10
+	VLD1    (R10), [V16.B16, V17.B16] // V16: low, V17: high
+	VLD1    (R7), [V4.B16, V5.B16, V6.B16, V7.B16]
+	ADD     R4, R7
+
+	VAND  V18.B16, V4.B16, V20.B16
+	VUSHR $4, V4.B16, V4.B16
+	VAND  V18.B16, V5.B16, V21.B16
+	VUSHR $4, V5.B16, V5.B16
+	VAND  V18.B16, V6.B16, V22.B16
+	VUSHR $4, V6.B16, V6.B16
+	VAND  V18.B16, V7.B16, V23.B16
+	VUSHR $4, V7.B16, V7.B16
+
+	VTBL V20.B16, [V16.B16], V20.B16
+	VTBL V4.B16, [V17.B16], V4.B16
+	VTBL V21.B16, [V16.B16], V21.B16
+	VTBL V5.B16, [V17.B16], V5.B16
+	VTBL V22.B16, [V16.B16], V22.B16
+	VTBL V6.B16, [V17.B16], V6.B16
+	VTBL V23.B16, [V16.B16], V23.B16
+	VTBL V7.B16, [V17.B16], V7.B16
+
+	VEOR V20.B16, V0.B16, V0.B16
+	VEOR V4.B16, V0.B16, V0.B16
+	VEOR V21.B16, V1.B16, V1.B16
+	VEOR V5.B16, V1.B16, V1.B16
+	VEOR V22.B16, V2.B16, V2.B16
+	VEOR V6.B16, V2.B16, V2.B16
+	VEOR V23.B16, V3.B16, V3.B16
+	VEOR V7.B16, V3.B16, V3.B16
+
+	SUBS $1, R9
+	BNE  inner64
+
+	VST1.P [V0.B16, V1.B16, V2.B16, V3.B16], 64(R5)
+	ADD    $64, R3
+	SUB    $64, R6
+	CMP    $64, R6
+	BGE    loop64
+
+check16:
+	CBZ R6, mulsumdone
+
+loop16:
+	VEOR V0.B16, V0.B16, V0.B16
+	MOVD R3, R7
+	MOVD R1, R8
+	MOVD R2, R9
+
+inner16:
+	MOVBU.P 1(R8), R10
+	ADD     R10<<5, R0, R10
+	VLD1    (R10), [V16.B16, V17.B16]
+	VLD1    (R7), [V4.B16]
+	ADD     R4, R7
+
+	VAND  V18.B16, V4.B16, V20.B16
+	VUSHR $4, V4.B16, V4.B16
+	VTBL  V20.B16, [V16.B16], V20.B16
+	VTBL  V4.B16, [V17.B16], V4.B16
+	VEOR  V20.B16, V0.B16, V0.B16
+	VEOR  V4.B16, V0.B16, V0.B16
+
+	SUBS $1, R9
+	BNE  inner16
+
+	VST1.P [V0.B16], 16(R5)
+	ADD    $16, R3
+	SUBS   $16, R6
+	BNE    loop16
+
+mulsumdone:
+	RET

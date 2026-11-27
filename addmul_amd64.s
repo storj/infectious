@@ -66,6 +66,40 @@ void addmulSSSE3(
 		_mm_storeu_si128((__m128i*)(&out[i]), output8);
 	}
 }
+
+void mulsumAVX2(
+	uint8_t * restrict tables, // 256 lowhigh tables, 32 bytes each
+	uint8_t * restrict coeffs,
+	int k,
+	uint8_t * restrict in,
+	int stride,
+	uint8_t * restrict out,
+	int n
+) {
+	__m256i lomask = _mm256_set1_epi8(0xF);
+
+	// The assembly does four of these 32 byte blocks per pass while it can,
+	// so each table load serves 128 bytes.
+	#pragma nounroll
+	for(int i = 0; i < (n/32)*32; i += 32){
+		__m256i sum = _mm256_setzero_si256();
+
+		for(int j = 0; j < k; j++){
+			uint8_t *lowhigh = &tables[coeffs[j]*32];
+			__m256i lotbl = _mm256_broadcastsi128_si256(_mm_loadu_si128((__m128i*)(&lowhigh[0])));
+			__m256i hitbl = _mm256_broadcastsi128_si256(_mm_loadu_si128((__m128i*)(&lowhigh[16])));
+
+			__m256i input = _mm256_loadu_si256((__m256i*)(&in[j*stride + i]));
+			__m256i lo    = _mm256_and_si256(lomask, input);
+			__m256i hi    = _mm256_and_si256(lomask, _mm256_srli_epi64(input, 4));
+
+			sum = _mm256_xor_si256(sum, _mm256_shuffle_epi8(lotbl, lo));
+			sum = _mm256_xor_si256(sum, _mm256_shuffle_epi8(hitbl, hi));
+		}
+
+		_mm256_storeu_si256((__m256i*)(&out[i]), sum);
+	}
+}
 */
 
 #include "textflag.h"
@@ -194,5 +228,131 @@ loopback_xor_avx2:
 	JNZ  loopback_xor_avx2
 
 done_xor_avx2:
+	VZEROUPPER
+	RET
+
+// func mulsumAVX2(tables *[256]pair, coeffs *byte, k int, in *byte, stride int, out *byte, len int)
+// Sets out[:len] to the sum over j < k of coeffs[j] * in[j*stride:][:len].
+// k must be positive and len a multiple of 32.
+TEXT ·mulsumAVX2(SB), NOSPLIT, $0-56
+	MOVQ tables+0(FP), AX
+	MOVQ coeffs+8(FP), BX
+	MOVQ k+16(FP), CX
+	MOVQ in+24(FP), SI
+	MOVQ stride+32(FP), R8
+	MOVQ out+40(FP), DI
+	MOVQ len+48(FP), DX
+
+	VMOVDQU nybble_mask<>(SB), Y14 // Y14: low nibble mask
+
+	CMPQ DX, $128
+	JL   check32
+
+loop128:
+	VPXOR Y0, Y0, Y0
+	VPXOR Y1, Y1, Y1
+	VPXOR Y2, Y2, Y2
+	VPXOR Y3, Y3, Y3
+	MOVQ  SI, R9  // R9: current input row
+	MOVQ  BX, R10 // R10: current coefficient
+	MOVQ  CX, R11 // R11: rows left
+
+inner128:
+	MOVBQZX        (R10), R12
+	INCQ           R10
+	SHLQ           $5, R12
+	ADDQ           AX, R12
+	VBROADCASTI128 (R12), Y12   // Y12: low
+	VBROADCASTI128 16(R12), Y13 // Y13: high
+
+	VMOVDQU (R9), Y4
+	VMOVDQU 32(R9), Y5
+	VMOVDQU 64(R9), Y6
+	VMOVDQU 96(R9), Y7
+	ADDQ    R8, R9
+
+	VPSRLQ $4, Y4, Y8
+	VPSRLQ $4, Y5, Y9
+	VPSRLQ $4, Y6, Y10
+	VPSRLQ $4, Y7, Y11
+	VPAND  Y14, Y4, Y4
+	VPAND  Y14, Y5, Y5
+	VPAND  Y14, Y6, Y6
+	VPAND  Y14, Y7, Y7
+	VPAND  Y14, Y8, Y8
+	VPAND  Y14, Y9, Y9
+	VPAND  Y14, Y10, Y10
+	VPAND  Y14, Y11, Y11
+
+	VPSHUFB Y4, Y12, Y4
+	VPSHUFB Y5, Y12, Y5
+	VPSHUFB Y6, Y12, Y6
+	VPSHUFB Y7, Y12, Y7
+	VPSHUFB Y8, Y13, Y8
+	VPSHUFB Y9, Y13, Y9
+	VPSHUFB Y10, Y13, Y10
+	VPSHUFB Y11, Y13, Y11
+
+	VPXOR Y4, Y0, Y0
+	VPXOR Y5, Y1, Y1
+	VPXOR Y6, Y2, Y2
+	VPXOR Y7, Y3, Y3
+	VPXOR Y8, Y0, Y0
+	VPXOR Y9, Y1, Y1
+	VPXOR Y10, Y2, Y2
+	VPXOR Y11, Y3, Y3
+
+	DECQ R11
+	JNZ  inner128
+
+	VMOVDQU Y0, (DI)
+	VMOVDQU Y1, 32(DI)
+	VMOVDQU Y2, 64(DI)
+	VMOVDQU Y3, 96(DI)
+	ADDQ    $128, SI
+	ADDQ    $128, DI
+	SUBQ    $128, DX
+	CMPQ    DX, $128
+	JGE     loop128
+
+check32:
+	TESTQ DX, DX
+	JZ    mulsumdone
+
+loop32:
+	VPXOR Y0, Y0, Y0
+	MOVQ  SI, R9
+	MOVQ  BX, R10
+	MOVQ  CX, R11
+
+inner32:
+	MOVBQZX        (R10), R12
+	INCQ           R10
+	SHLQ           $5, R12
+	ADDQ           AX, R12
+	VBROADCASTI128 (R12), Y12
+	VBROADCASTI128 16(R12), Y13
+
+	VMOVDQU (R9), Y4
+	ADDQ    R8, R9
+
+	VPSRLQ  $4, Y4, Y8
+	VPAND   Y14, Y4, Y4
+	VPAND   Y14, Y8, Y8
+	VPSHUFB Y4, Y12, Y4
+	VPSHUFB Y8, Y13, Y8
+	VPXOR   Y4, Y0, Y0
+	VPXOR   Y8, Y0, Y0
+
+	DECQ R11
+	JNZ  inner32
+
+	VMOVDQU Y0, (DI)
+	ADDQ    $32, SI
+	ADDQ    $32, DI
+	SUBQ    $32, DX
+	JNZ     loop32
+
+mulsumdone:
 	VZEROUPPER
 	RET

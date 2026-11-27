@@ -53,3 +53,34 @@ func addmul(z, x []byte, y byte) {
 		z[i] ^= gf_mul_y[x[i]]
 	}
 }
+
+// mulsumMaxLen is the longest row mulsum fuses. mulsumNEON reads 64 bytes
+// from every row in turn, and with long rows (it measured 4x slower at 1MiB
+// on an M1) that loses to streaming one row at a time through addmul. The
+// two measured even between 16KiB and 64KiB.
+const mulsumMaxLen = 8 << 10
+
+//go:noescape
+func mulsumNEON(tables *[256]pair, coeffs *byte, k int, in *byte, stride int, out *byte, len int)
+
+// mulsum sets out to the sum of coeffs[j] * in[j*len(out):][:len(out)] over
+// all j. It replaces clearing out and calling addmul once per row, keeping
+// out in registers for all the rows instead of loading and storing it again
+// for each of them.
+func mulsum(out, in, coeffs []byte) {
+	n := len(out)
+	if len(coeffs) == 0 || n > mulsumMaxLen {
+		mulsumRows(out, in, coeffs)
+		return
+	}
+	in = in[:len(coeffs)*n] // the assembly reads all the rows, so check they are in bounds
+
+	done := n &^ 15
+	if done > 0 {
+		out[0] ^= in[0] & 0 // hints to race detector, the assembly is not instrumented
+		mulsumNEON(&mul_table_pair, &coeffs[0], len(coeffs), &in[0], n, &out[0], done)
+	}
+	if done < n {
+		mulsumTail(out[done:], in[done:], coeffs, n)
+	}
+}

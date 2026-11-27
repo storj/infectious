@@ -323,6 +323,28 @@ func BenchmarkEncodeSingle(b *testing.B) {
 	}
 }
 
+// BenchmarkEncodeSingleStripe matches uplink: one 29*256 byte stripe, encoded
+// separately for each of the 110 pieces.
+func BenchmarkEncodeSingleStripe(b *testing.B) {
+	const block = 256
+	const total, required = 110, 29
+
+	code, err := NewFEC(required, total)
+	if err != nil {
+		b.Fatal(err)
+	}
+	data := RandomBytes(required * block)
+	output := make([]byte, block)
+
+	b.SetBytes(block * required)
+	b.ReportAllocs()
+	for b.Loop() {
+		for j := range total {
+			code.EncodeSingle(data, output, j)
+		}
+	}
+}
+
 func BenchmarkRebuild(b *testing.B) {
 	const block = 4096
 	const total, required = 40, 20

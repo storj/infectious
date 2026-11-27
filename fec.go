@@ -145,12 +145,7 @@ func (f *FEC) Encode(input []byte, output func(Share)) error {
 
 	fec_buf := make([]byte, block_size)
 	for i := k; i < n; i++ {
-		clear(fec_buf)
-
-		for j := range k {
-			addmul(fec_buf, input[j*block_size:j*block_size+block_size],
-				enc_matrix[i*k+j])
-		}
+		mulsum(fec_buf, input, enc_matrix[i*k:i*k+k])
 
 		output(Share{
 			Number: i,
@@ -198,12 +193,7 @@ func (f *FEC) EncodeSingle(input, output []byte, num int) error {
 		return nil
 	}
 
-	clear(output)
-
-	for i := range k {
-		addmul(output, input[i*block_size:i*block_size+block_size],
-			enc_matrix[num*k+i])
-	}
+	mulsum(output, input, enc_matrix[num*k:num*k+k])
 
 	return nil
 }
