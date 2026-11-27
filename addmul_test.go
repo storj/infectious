@@ -74,3 +74,26 @@ func BenchmarkAddmul(b *testing.B) {
 		})
 	}
 }
+
+func TestMulsum(t *testing.T) {
+	for range 2000 {
+		k := rand.Intn(40)
+		n := rand.Intn(600)
+		in := RandomBytes(k * n)
+		coeffs := RandomBytes(k)
+		if k > 0 {
+			coeffs[rand.Intn(k)] = 0
+		}
+
+		want := make([]byte, n)
+		for j, c := range coeffs {
+			addmulSlow(want, in[j*n:(j+1)*n], c)
+		}
+		got := RandomBytes(n) // mulsum must overwrite out, not accumulate into it
+		mulsum(got, in, coeffs)
+
+		if !bytes.Equal(want, got) {
+			t.Fatalf("mismatch: k=%d n=%d\nwant %x\ngot  %x", k, n, want, got)
+		}
+	}
+}

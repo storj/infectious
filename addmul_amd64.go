@@ -70,3 +70,35 @@ func addmul(z, x []byte, y byte) {
 		z[i] ^= gf_mul_y[x[i]]
 	}
 }
+
+// mulsumMaxLen is the longest row mulsum fuses. mulsumAVX2 reads 128 bytes
+// from every row in turn, and with long rows that loses to streaming one row
+// at a time through addmul. On a Zen 1 Threadripper the fused kernel was
+// 16-30% faster up to 8KiB, 6% faster at 16KiB, and slower from 32KiB, down
+// to a sixth of the speed at 1MiB.
+const mulsumMaxLen = 8 << 10
+
+//go:noescape
+func mulsumAVX2(tables *[256]pair, coeffs *byte, k int, in *byte, stride int, out *byte, len int)
+
+// mulsum sets out to the sum of coeffs[j] * in[j*len(out):][:len(out)] over
+// all j. It replaces clearing out and calling addmul once per row, keeping
+// out in registers for all the rows instead of loading and storing it again
+// for each of them.
+func mulsum(out, in, coeffs []byte) {
+	n := len(out)
+	if !hasAVX2 || len(coeffs) == 0 || n > mulsumMaxLen {
+		mulsumRows(out, in, coeffs)
+		return
+	}
+	in = in[:len(coeffs)*n] // the assembly reads all the rows, so check they are in bounds
+
+	done := n &^ 31
+	if done > 0 {
+		out[0] ^= in[0] & 0 // hints to race detector, the assembly is not instrumented
+		mulsumAVX2(&mul_table_pair, &coeffs[0], len(coeffs), &in[0], n, &out[0], done)
+	}
+	if done < n {
+		mulsumTail(out[done:], in[done:], coeffs, n)
+	}
+}

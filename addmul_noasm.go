@@ -38,3 +38,9 @@ func addmul(z []byte, x []byte, y byte) {
 		z[i] ^= gf_mul_y[x[i]]
 	}
 }
+
+// mulsum sets out to the sum of coeffs[j] * in[j*len(out):][:len(out)] over
+// all j.
+func mulsum(out, in, coeffs []byte) {
+	mulsumRows(out, in, coeffs)
+}
