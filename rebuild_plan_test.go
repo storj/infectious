@@ -610,6 +610,35 @@ func TestReplanABA(t *testing.T) {
 	}
 }
 
+func TestReplanAllocs(t *testing.T) {
+	const runs = 10
+	code, err := NewFEC(4, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Each measured call gets a Rebuilder first replanned with only k
+	// shares, so growth on the jump to n shares would be counted.
+	// AllocsPerRun calls the function runs+1 times.
+	rs := make([]Rebuilder, runs+1)
+	for i := range rs {
+		if err := rs[i].Replan(code, seq(4, 8)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	all := seq(0, 8)
+	i := 0
+	allocs := testing.AllocsPerRun(runs, func() {
+		if err := rs[i].Replan(code, all); err != nil {
+			t.Fatal(err)
+		}
+		i++
+	})
+	if allocs != 0 {
+		t.Fatalf("Replan allocates %v times when the share count grows", allocs)
+	}
+}
+
 func seq(from, to int) []int {
 	out := make([]int, 0, to-from)
 	for i := from; i < to; i++ {

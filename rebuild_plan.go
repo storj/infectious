@@ -96,6 +96,11 @@ func (f *FEC) planInto(p *RebuildPlan, s *planScratch, shareNumbers []int) error
 		return NotEnoughShares
 	}
 
+	// Valid input has at most n entries, so reserving n means the sort
+	// buffer does not grow with the number of shares supplied.
+	if cap(s.sorted) < n {
+		s.sorted = make([]int, 0, n)
+	}
 	s.sorted = append(s.sorted[:0], shareNumbers...)
 	sorted := s.sorted
 	slices.Sort(sorted)
