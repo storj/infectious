@@ -73,35 +73,67 @@ type RebuildPlan struct {
 // shareNumbers must contain at least k entries, each in [0, n), with no
 // duplicates. It is not modified.
 func (f *FEC) PlanRebuild(shareNumbers []int) (*RebuildPlan, error) {
+	p := new(RebuildPlan)
+	if err := f.planInto(p, new(planScratch), shareNumbers); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// planScratch holds the working buffers of planInto that do not end up in the
+// plan.
+type planScratch struct {
+	sorted []int
+	inv    invertScratch
+}
+
+// planInto fills p with the plan for shareNumbers, reusing p's and s's
+// buffers. On error p is left in an unspecified state.
+func (f *FEC) planInto(p *RebuildPlan, s *planScratch, shareNumbers []int) error {
 	k, n := f.k, f.n
 
 	if len(shareNumbers) < k {
-		return nil, NotEnoughShares
+		return NotEnoughShares
 	}
 
-	sorted := append([]int(nil), shareNumbers...)
+	// Valid input has at most n entries, so reserving n means the sort
+	// buffer does not grow with the number of shares supplied.
+	if cap(s.sorted) < n {
+		s.sorted = make([]int, 0, n)
+	}
+	s.sorted = append(s.sorted[:0], shareNumbers...)
+	sorted := s.sorted
 	slices.Sort(sorted)
 
 	if sorted[0] < 0 {
-		return nil, fmt.Errorf("invalid share id: %d", sorted[0])
+		return fmt.Errorf("invalid share id: %d", sorted[0])
 	}
 	if last := sorted[len(sorted)-1]; last >= n {
-		return nil, fmt.Errorf("invalid share id: %d", last)
+		return fmt.Errorf("invalid share id: %d", last)
 	}
 	for i := 1; i < len(sorted); i++ {
 		if sorted[i] == sorted[i-1] {
-			return nil, fmt.Errorf("duplicate share id: %d", sorted[i])
+			return fmt.Errorf("duplicate share id: %d", sorted[i])
 		}
 	}
 
-	slotOf := make([]int, n)
-	for i := range slotOf {
-		slotOf[i] = -1
+	p.k, p.n = k, n
+
+	p.slotOf = resize(p.slotOf, n)
+	for i := range p.slotOf {
+		p.slotOf[i] = -1
 	}
 
-	m_dec := make([]byte, k*k)
-	slotShare := make([]int, k)
-	var present, missing []int
+	p.m_dec = resize(p.m_dec, k*k)
+	clear(p.m_dec)
+	p.slotShare = resize(p.slotShare, k)
+	if cap(p.present) < k {
+		p.present = make([]int, 0, k)
+		p.missing = make([]int, 0, k)
+	}
+	p.present, p.missing = p.present[:0], p.missing[:0]
+
+	m_dec, slotShare, slotOf := p.m_dec, p.slotShare, p.slotOf
 
 	// This mirrors the slot selection in (*FEC).Rebuild exactly. Walking the
 	// sorted numbers from both ends puts data share i in slot i whenever it
@@ -121,29 +153,17 @@ func (f *FEC) PlanRebuild(shareNumbers []int) (*RebuildPlan, error) {
 			// Only reachable via the front pointer, so shareID == i and row i
 			// of the decode matrix is the identity row.
 			m_dec[i*(k+1)] = 1
-			present = append(present, i)
+			p.present = append(p.present, i)
 		} else {
 			copy(m_dec[i*k:i*k+k], f.enc_matrix[shareID*k:])
-			missing = append(missing, i)
+			p.missing = append(p.missing, i)
 		}
 
 		slotShare[i] = shareID
 		slotOf[shareID] = i
 	}
 
-	if err := invertMatrix(m_dec, k); err != nil {
-		return nil, err
-	}
-
-	return &RebuildPlan{
-		k:         k,
-		n:         n,
-		m_dec:     m_dec,
-		slotShare: slotShare,
-		slotOf:    slotOf,
-		present:   present,
-		missing:   missing,
-	}, nil
+	return invertMatrix(m_dec, k, &s.inv)
 }
 
 // Required returns the number of shares the plan decodes from.
@@ -156,10 +176,17 @@ func (p *RebuildPlan) Shares() []int { return p.slotShare }
 // Rebuilder applies a RebuildPlan to share data. It owns scratch buffers that
 // it reuses across calls, so unlike RebuildPlan it is not safe for concurrent
 // use. Create one per goroutine.
+//
+// The zero Rebuilder is ready for Replan.
 type Rebuilder struct {
 	plan    *RebuildPlan
 	sharesv [][]byte
 	buf     []byte
+
+	// own is the plan Replan writes into, kept apart from plans built by
+	// PlanRebuild because those may be shared.
+	own     *RebuildPlan
+	scratch planScratch
 }
 
 // NewRebuilder returns a Rebuilder that applies p.
@@ -170,8 +197,30 @@ func (p *RebuildPlan) NewRebuilder() *Rebuilder {
 	}
 }
 
-// Plan returns the plan the Rebuilder applies.
+// Plan returns the plan the Rebuilder applies. A plan obtained after Replan
+// belongs to r and is overwritten by its next Replan.
 func (r *Rebuilder) Plan() *RebuildPlan { return r.plan }
+
+// Replan points r at a plan for shareNumbers, as built by (*FEC).PlanRebuild,
+// reusing r's buffers. It allocates only the first time, or when k or n grow.
+// The plan r uses after Replan belongs to r alone; plans from PlanRebuild
+// stay immutable and shared.
+//
+// If Replan returns an error, r has no plan, and Rebuild fails until the next
+// successful Replan.
+func (r *Rebuilder) Replan(f *FEC, shareNumbers []int) error {
+	if r.own == nil {
+		r.own = new(RebuildPlan)
+	}
+	err := f.planInto(r.own, &r.scratch, shareNumbers)
+	if err != nil {
+		r.plan = nil
+		return err
+	}
+	r.plan = r.own
+	r.sharesv = resize(r.sharesv, f.k)
+	return nil
+}
 
 // Rebuild is the planned equivalent of (*FEC).Rebuild: it calls output k
 // times, once per original data piece, with the piece number and its data.
@@ -187,6 +236,9 @@ func (r *Rebuilder) Plan() *RebuildPlan { return r.plan }
 // be.
 func (r *Rebuilder) Rebuild(shares []Share, output func(Share)) error {
 	p := r.plan
+	if p == nil {
+		return errors.New("rebuilder has no plan")
+	}
 
 	sharesv := r.sharesv
 	clear(sharesv)

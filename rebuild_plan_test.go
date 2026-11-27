@@ -492,3 +492,209 @@ func BenchmarkRebuildStripes(b *testing.B) {
 		}
 	}
 }
+
+// checkReplan replans r for nums and requires that its rebuild is byte
+// identical to that of a fresh PlanRebuild + NewRebuilder, and recovers data.
+func checkReplan(t *testing.T, label string, code *FEC, r *Rebuilder, shares []Share, nums []int, block int, data []byte) {
+	t.Helper()
+	k := code.Required()
+
+	plan, err := code.PlanRebuild(nums)
+	if err != nil {
+		t.Fatalf("%s: PlanRebuild(%v): %s", label, nums, err)
+	}
+	if err := r.Replan(code, nums); err != nil {
+		t.Fatalf("%s: Replan(%v): %s", label, nums, err)
+	}
+	if !slices.Equal(r.Plan().Shares(), plan.Shares()) {
+		t.Fatalf("%s: Replan(%v) uses shares %v, PlanRebuild uses %v",
+			label, nums, r.Plan().Shares(), plan.Shares())
+	}
+
+	subset := pickShares(shares, nums)
+	wantOut, wantStore := collect(k, block)
+	if err := plan.NewRebuilder().Rebuild(subset, wantStore); err != nil {
+		t.Fatalf("%s: planned Rebuild(%v): %s", label, nums, err)
+	}
+	gotOut, gotStore := collect(k, block)
+	if err := r.Rebuild(subset, gotStore); err != nil {
+		t.Fatalf("%s: replanned Rebuild(%v): %s", label, nums, err)
+	}
+	if !bytes.Equal(gotOut, wantOut) {
+		t.Fatalf("%s: shares %v: replanned rebuild gave %s, planned gave %s",
+			label, nums, brief(gotOut), brief(wantOut))
+	}
+	if !bytes.Equal(gotOut, data) {
+		t.Fatalf("%s: shares %v: replanned rebuild gave %s, want %s",
+			label, nums, brief(gotOut), brief(data))
+	}
+}
+
+func TestReplanMatchesPlanRebuild(t *testing.T) {
+	const block = 64
+	rng := rand.New(rand.NewSource(11))
+
+	// One Rebuilder across every config, so it also replans across k and n
+	// shrinking and growing.
+	var r Rebuilder
+	for _, conf := range []struct{ k, n int }{{1, 1}, {1, 4}, {4, 8}, {29, 110}, {3, 5}, {20, 50}, {29, 80}} {
+		k, n := conf.k, conf.n
+		code, err := NewFEC(k, n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, shares := encodeForTest(t, code, block)
+
+		sets := [][]int{
+			seq(0, k),   // all data
+			seq(n-k, n), // all parity, when n >= 2k
+			seq(0, n),   // everything
+		}
+		for range 50 {
+			perm := rng.Perm(n)
+			sets = append(sets, perm[:k+rng.Intn(n-k+1)]) // mixed, unsorted
+		}
+		for i, nums := range sets {
+			checkReplan(t, fmt.Sprintf("k%dn%d/set%d", k, n, i), code, &r, shares, nums, block, data)
+		}
+
+		bad := [][]int{
+			seq(0, k-1), // too few
+			append(seq(0, k-1), -1),
+			append(seq(0, k-1), n),
+		}
+		if k > 1 {
+			bad = append(bad, append(seq(0, k-1), 0)) // duplicate
+		}
+		for _, nums := range bad {
+			_, wantErr := code.PlanRebuild(nums)
+			err := r.Replan(code, nums)
+			if err == nil || wantErr == nil || err.Error() != wantErr.Error() {
+				t.Fatalf("k%dn%d: Replan(%v) = %v, PlanRebuild gave %v", k, n, nums, err, wantErr)
+			}
+			if err := r.Rebuild(pickShares(shares, seq(0, k)), func(Share) {}); err == nil {
+				t.Fatalf("k%dn%d: Rebuild after failed Replan: expected an error", k, n)
+			}
+		}
+		// and it recovers
+		checkReplan(t, fmt.Sprintf("k%dn%d/recover", k, n), code, &r, shares, seq(n-k, n), block, data)
+	}
+}
+
+func TestReplanABA(t *testing.T) {
+	const block = 64
+	const k, n = 8, 20
+
+	code, err := NewFEC(k, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, shares := encodeForTest(t, code, block)
+
+	a := []int{0, 2, 4, 6, 8, 11, 13, 17, 19} // mixed, with a spare
+	b := []int{15, 7, 1, 9, 10, 12, 14, 3}    // different data and parity
+
+	// Start from a shared plan, which Replan must leave alone.
+	shared, err := code.PlanRebuild(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := shared.NewRebuilder()
+	before := slices.Clone(shared.m_dec)
+
+	for i, nums := range [][]int{a, b, a, b, a} {
+		checkReplan(t, fmt.Sprintf("step%d", i), code, r, shares, nums, block, data)
+	}
+	if !bytes.Equal(shared.m_dec, before) || r.Plan() == shared {
+		t.Fatal("Replan wrote into a plan from PlanRebuild")
+	}
+}
+
+func TestReplanAllocs(t *testing.T) {
+	const runs = 10
+	code, err := NewFEC(4, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Each measured call gets a Rebuilder first replanned with only k
+	// shares, so growth on the jump to n shares would be counted.
+	// AllocsPerRun calls the function runs+1 times.
+	rs := make([]Rebuilder, runs+1)
+	for i := range rs {
+		if err := rs[i].Replan(code, seq(4, 8)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	all := seq(0, 8)
+	i := 0
+	allocs := testing.AllocsPerRun(runs, func() {
+		if err := rs[i].Replan(code, all); err != nil {
+			t.Fatal(err)
+		}
+		i++
+	})
+	if allocs != 0 {
+		t.Fatalf("Replan allocates %v times when the share count grows", allocs)
+	}
+}
+
+func seq(from, to int) []int {
+	out := make([]int, 0, to-from)
+	for i := from; i < to; i++ {
+		out = append(out, i)
+	}
+	return out
+}
+
+// BenchmarkReplan replans for every row, alternating between share sets, the
+// way a downloader does when pieces arrive in a jittery order. Compare the
+// modes with: benchstat -col /mode.
+func BenchmarkReplan(b *testing.B) {
+	const block = 256
+	const k, n, got = 29, 110, 39
+
+	code, err := NewFEC(k, n)
+	if err != nil {
+		b.Fatal(err)
+	}
+	_, shares := encodeForTest(b, code, block)
+
+	rng := rand.New(rand.NewSource(5))
+	sets := make([][]int, 16)
+	subsets := make([][]Share, len(sets))
+	for i := range sets {
+		sets[i] = rng.Perm(n)[:got]
+		subsets[i] = pickShares(shares, sets[i])
+	}
+
+	run := func(b *testing.B, rebuilder func(nums []int) *Rebuilder) {
+		b.SetBytes(block * k)
+		b.ReportAllocs()
+		for i := 0; b.Loop(); i++ {
+			nums := sets[i%len(sets)]
+			if err := rebuilder(nums).Rebuild(subsets[i%len(sets)], func(Share) {}); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	b.Run("mode=replan", func(b *testing.B) {
+		var r Rebuilder
+		run(b, func(nums []int) *Rebuilder {
+			if err := r.Replan(code, nums); err != nil {
+				b.Fatal(err)
+			}
+			return &r
+		})
+	})
+	b.Run("mode=plan", func(b *testing.B) {
+		run(b, func(nums []int) *Rebuilder {
+			plan, err := code.PlanRebuild(nums)
+			if err != nil {
+				b.Fatal(err)
+			}
+			return plan.NewRebuilder()
+		})
+	})
+}
