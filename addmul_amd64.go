@@ -43,7 +43,8 @@ func addmul(z, x []byte, y byte) {
 	if hasAVX2 {
 		done = len(z) &^ 31
 		if done > 0 {
-			_, z[0] = x[0], z[0] // hints to race detector
+			_ = x[done-1]    // the assembly reads x[:done], so check it is in bounds
+			z[0] ^= x[0] & 0 // hints to race detector, the assembly is not instrumented
 			addmulAVX2(&mul_table_pair[y], &x[0], &z[0], done)
 			if done == len(z) {
 				return
@@ -59,7 +60,7 @@ func addmul(z, x []byte, y byte) {
 	// beats the Go loop from 16 bytes up. Below that the call overhead wins.
 	// AVX2 implies SSSE3, so this also mops up an AVX2 remainder.
 	if hasSSSE3 && len(z) >= 16 {
-		_, z[0] = x[0], z[0] // hints to race detector
+		z[0] ^= x[0] & 0 // hints to race detector, the assembly is not instrumented
 		addmulSSSE3(&mul_table_pair[y], &x[0], &z[0], len(z), &gf_mul_table[y][0])
 		return
 	}
