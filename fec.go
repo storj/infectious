@@ -302,7 +302,7 @@ func (f *FEC) Rebuild(shares []Share, output func(Share)) error {
 		indexes[i] = share_id
 	}
 
-	if err := invertMatrix(m_dec, k); err != nil {
+	if err := invertMatrix(m_dec, k, new(invertScratch)); err != nil {
 		return err
 	}
 

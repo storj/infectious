@@ -43,13 +43,6 @@ type pivotSearcher struct {
 	ipiv []bool
 }
 
-func newPivotSearcher(k int) *pivotSearcher {
-	return &pivotSearcher{
-		k:    k,
-		ipiv: make([]bool, k),
-	}
-}
-
 func (p *pivotSearcher) search(col int, matrix []byte) (int, int, error) {
 	if p.ipiv[col] == false && matrix[col*p.k+col] != 0 {
 		p.ipiv[col] = true
@@ -78,12 +71,40 @@ func swap(a, b *byte) {
 	*b = tmp
 }
 
-// TODO(jeff): matrix is a K*K array, row major.
-func invertMatrix(matrix []byte, k int) error {
-	pivot_searcher := newPivotSearcher(k)
-	indxc := make([]int, k)
-	indxr := make([]int, k)
-	id_row := make([]byte, k)
+// invertScratch holds the working buffers of invertMatrix, so that callers
+// inverting many matrices can reuse them.
+type invertScratch struct {
+	pivot_searcher pivotSearcher
+	indxc, indxr   []int
+	id_row         []byte
+}
+
+// reset sizes the buffers for a k*k matrix and clears them.
+func (s *invertScratch) reset(k int) {
+	s.pivot_searcher.k = k
+	s.pivot_searcher.ipiv = resize(s.pivot_searcher.ipiv, k)
+	s.indxc = resize(s.indxc, k)
+	s.indxr = resize(s.indxr, k)
+	s.id_row = resize(s.id_row, k)
+	clear(s.pivot_searcher.ipiv)
+	clear(s.id_row)
+}
+
+// resize returns s with length n, reusing its backing array when it is large
+// enough. The contents are not cleared.
+func resize[T any](s []T, n int) []T {
+	if cap(s) < n {
+		return make([]T, n)
+	}
+	return s[:n]
+}
+
+// invertMatrix inverts matrix, a k*k array in row major order, in place,
+// using s for its working buffers.
+func invertMatrix(matrix []byte, k int, s *invertScratch) error {
+	s.reset(k)
+	pivot_searcher := &s.pivot_searcher
+	indxc, indxr, id_row := s.indxc, s.indxr, s.id_row
 
 	for col := range k {
 		icol, irow, err := pivot_searcher.search(col, matrix)
